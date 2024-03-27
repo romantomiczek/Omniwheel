@@ -1,0 +1,22 @@
+{
+  "C_Cpp.errorSquiggles": "disabled",
+  "editor.formatOnSave": true,
+  "terminal.integrated.scrollback": 1000000,
+  "files.associations": {
+    "tft_espi_esp32_s3.c": "cpp",
+    "ui_helpers.h": "c",
+    "ui.h": "c",
+    "*.tcc": "cpp",
+    "string": "cpp",
+    "fstream": "cpp",
+    "cstdio": "c",
+    "lvgl.h": "c",
+    "ui_helpers2.h": "c"
+  },
+  "cSpell.words": [
+    "dispp",
+    "LVGL",
+    "spinbox",
+    "Spinbox"
+  ]
+}
