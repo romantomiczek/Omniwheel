@@ -180,7 +180,7 @@ void loop()
   if (millis() - lastTime2 > 500)
   {
     lastTime2 = millis();
-    float result = map((float)RemoteXY.slider_01, 0, 100, 0, 255);
+    /* float result = map((float)RemoteXY.slider_01, 0, 100, 0, 255);
     Serial.println("Result: " + String(result));
     analogWrite(MOTOR1_PIN1, abs(result));
     digitalWrite(MOTOR1_PIN2, LOW);
@@ -188,6 +188,6 @@ void loop()
     digitalWrite(MOTOR2_PIN2, LOW);
     analogWrite(MOTOR3_PIN1, abs(result));
     digitalWrite(MOTOR3_PIN2, LOW);
-    dtostrf(result, 0, 1, RemoteXY.label);
+    dtostrf(result, 0, 1, RemoteXY.label);*/
   }
 }
