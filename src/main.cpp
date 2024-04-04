@@ -1,18 +1,40 @@
 #include <Arduino.h>
 #include "Config.h"
 
+#define DEBUG 0
+
+#if DEBUG == 1
+#define debug(x) Serial.print(x)
+#define debugln(x) Serial.println(x)
+#else
+#define debug(x)
+#define debugln(x)
+#endif
+
 unsigned long lastTime = 0;
 unsigned long lastTime2 = 0;
 
 float PWM1 = 0;
 float PWM2 = 0;
 float PWM3 = 0;
+float PWM21 = 0;
+float PWM22 = 0;
+float PWM23 = 0;
 float setPercentageSpeed = 0;
+float setPercentageSpeed2 = 0;
 int setSpeed = 0;
+int setSpeed2 = 0;
 float maxCalcPWM = 0;
+float maxCalcPWM2 = 0;
 float calcPWM1 = 0;
 float calcPWM2 = 0;
 float calcPWM3 = 0;
+float calcPWM21 = 0;
+float calcPWM22 = 0;
+float calcPWM23 = 0;
+
+String inputString = "";     // a String to hold incoming data
+bool stringComplete = false; // whether the string is complete
 
 // you can enable debug logging to Serial at 115200
 // #define REMOTEXY__DEBUGLOG
@@ -30,23 +52,22 @@ float calcPWM3 = 0;
 
 // RemoteXY configurate
 #pragma pack(push, 1)
-uint8_t RemoteXY_CONF[] = // 53 bytes
-    {255, 4, 0, 4, 0, 46, 0, 17, 0, 0, 0, 31, 1, 106, 200, 1, 1, 4, 0, 3,
-     22, 6, 66, 24, 131, 105, 26, 5, 12, 48, 60, 60, 53, 106, 26, 31, 4, 85, 83, 15,
-     111, 0, 105, 26, 67, 46, 179, 27, 13, 5, 8, 31, 4};
+uint8_t RemoteXY_CONF[] = // 45 bytes
+    {255, 3, 0, 6, 0, 38, 0, 17, 0, 0, 0, 31, 1, 106, 200, 1, 1, 3, 0, 5,
+     15, 40, 60, 60, 53, 106, 26, 31, 4, 85, 83, 15, 111, 0, 105, 26, 67, 30, 152, 40,
+     10, 4, 16, 26, 6};
 
 // this structure defines all the variables and events of your control interface
 struct
 {
 
   // input variables
-  uint8_t select_01;    // =0 if select position A, =1 if position B, =2 if position C, ...
   int8_t joystick_01_x; // from -100 to 100}
   int8_t joystick_01_y; // from -100 to 100}
   int8_t slider_01;     // =0..100 slider position
 
   // output variables
-  char label[4]; // string UTF8 end zero
+  char sliderValue[6]; // string UTF8 end zero
 
   // other variable
   uint8_t connect_flag; // =1 if wire connected, else =0
@@ -119,30 +140,76 @@ void setMotorsPWM()
   }
 }
 
+void setMotorsPWM2()
+{
+  if (PWM21 > 0)
+  {
+    analogWrite(MOTOR1_PIN1, abs(calcPWM21));
+    digitalWrite(MOTOR1_PIN2, LOW);
+  }
+  else
+  {
+    digitalWrite(MOTOR1_PIN1, LOW);
+    analogWrite(MOTOR1_PIN2, abs(calcPWM21));
+  }
+
+  if (PWM22 > 0)
+  {
+    analogWrite(MOTOR2_PIN1, abs(calcPWM22));
+    digitalWrite(MOTOR2_PIN2, LOW);
+  }
+  else
+  {
+    digitalWrite(MOTOR2_PIN1, LOW);
+    analogWrite(MOTOR2_PIN2, abs(calcPWM22));
+  }
+
+  if (PWM23 > 0)
+  {
+    analogWrite(MOTOR3_PIN1, abs(calcPWM23));
+    digitalWrite(MOTOR3_PIN2, LOW);
+  }
+  else
+  {
+    digitalWrite(MOTOR3_PIN1, LOW);
+    analogWrite(MOTOR3_PIN2, abs(calcPWM23));
+  }
+}
+
 void calcMotorsSpeed(float x, float y, float omega)
 {
   if (x != 0 || y != 0)
   {
 
-    // Serial.println(String(x) + ":" + String(y));
+    // debugln(String(x) + ":" + String(y));
     PWM1 = x * M11 + y * M12 + omega * M13;
     PWM2 = x * M21 + y * M22 + omega * M23;
     PWM3 = x * M31 + y * M32 + omega * M33;
-    // Serial.println(String(PWM1) + " " + String(PWM2) + " " + String(PWM3));
+    // debugln(String(PWM1) + " " + String(PWM2) + " " + String(PWM3));
 
     setPercentageSpeed = max(abs(x), abs(y));
-    // Serial.println("Set speed: " + String(setPercentageSpeed));
+    // debugln("Set speed: " + String(setPercentageSpeed));
 
-    setSpeed = 255 * setPercentageSpeed;
-    // Serial.println("Set PWM speed: " + String(setSpeed));
+    // setSpeed = 255 * setPercentageSpeed;
+    setSpeed = map(setPercentageSpeed * 100, 0, 100, PWM_THRESHOLD, 255);
+    // debugln("Set PWM speed: " + String(setSpeed));
 
     maxCalcPWM = max(abs(PWM1), max(abs(PWM2), abs(PWM3)));
-    // Serial.println("Max calc PWM: " + String(maxCalcPWM));
+    // debugln("Max calc PWM: " + String(maxCalcPWM));
 
     calcPWM1 = map(abs(PWM1) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
     calcPWM2 = map(abs(PWM2) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
     calcPWM3 = map(abs(PWM3) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
-    // Serial.println("Calc PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
+    debugln("Calc PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
+
+    // calcPWM1 = PWM_Const_2[(int)calcPWM1];
+    // calcPWM2 = PWM_Const_2[(int)calcPWM2];
+    // calcPWM3 = PWM_Const_2[(int)calcPWM3];
+    // calcPWM1 = 0; // 127-135
+    // calcPWM2 = 0;   // 137-156
+    // calcPWM3 = 0;   // 146-151
+
+    debugln("Cacl new PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
 
     setMotorsPWM();
   }
@@ -152,8 +219,41 @@ void calcMotorsSpeed(float x, float y, float omega)
   }
 }
 
+void calcMotorsSpeed2(float x_dot, float y_dot, float theta_dot)
+{
+  if (x_dot != 0 || y_dot != 0)
+  {
+    float R = 1; // radius of wheel
+    PWM23 = -R * theta_dot + x_dot;
+    PWM22 = -R * theta_dot - 0.5 * x_dot - sin(PI / 3.0) * y_dot;
+    PWM21 = -R * theta_dot - 0.5 * x_dot + sin(PI / 3.0) * y_dot;
+
+    setPercentageSpeed2 = max(abs(x_dot), abs(y_dot));
+    // debugln("Set speed: " + String(setPercentageSpeed));
+
+    setSpeed2 = map(setPercentageSpeed2 * 100, 0, 100, PWM_THRESHOLD, 255);
+    // debugln("Set PWM speed: " + String(setSpeed));
+
+    maxCalcPWM2 = max(abs(PWM21), max(abs(PWM22), abs(PWM23)));
+    // debugln("Max calc PWM: " + String(maxCalcPWM));
+
+    calcPWM21 = map(abs(PWM21) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
+    calcPWM22 = map(abs(PWM22) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
+    calcPWM23 = map(abs(PWM23) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
+    debugln("Calc PWM2: " + String(calcPWM21) + " " + String(calcPWM22) + " " + String(calcPWM23));
+    debugln("PWM: " + String(PWM21) + " " + String(PWM22) + " " + String(PWM23));
+
+    setMotorsPWM2();
+  }
+  else
+  {
+    STOP();
+  }
+}
+
 void setup()
 {
+  delay(1000);
   Serial.begin(115200);
   pinMode(MOTOR1_PIN1, OUTPUT);
   pinMode(MOTOR1_PIN2, OUTPUT);
@@ -164,30 +264,63 @@ void setup()
 
   RemoteXY_Init();
   STOP();
-  Serial.println("Setup done");
+  debugln("Setup done");
 }
 
 void loop()
 {
   RemoteXY_Handler();
-  if (millis() - lastTime > 100)
+  if (stringComplete)
   {
-    lastTime = millis();
+    String s = inputString;
+    // clear the string:
+    inputString = "";
+    stringComplete = false;
 
-    calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
-  }
-
-  if (millis() - lastTime2 > 500)
-  {
-    lastTime2 = millis();
-    /* float result = map((float)RemoteXY.slider_01, 0, 100, 0, 255);
-    Serial.println("Result: " + String(result));
+    int result = s.toInt();
+    debugln("Result: " + String(result));
     analogWrite(MOTOR1_PIN1, abs(result));
     digitalWrite(MOTOR1_PIN2, LOW);
     analogWrite(MOTOR2_PIN1, abs(result));
     digitalWrite(MOTOR2_PIN2, LOW);
     analogWrite(MOTOR3_PIN1, abs(result));
     digitalWrite(MOTOR3_PIN2, LOW);
-    dtostrf(result, 0, 1, RemoteXY.label);*/
+    dtostrf(result, 0, 1, RemoteXY.sliderValue);
+  }
+
+  if (millis() - lastTime > 100)
+  {
+    lastTime = millis();
+
+    calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+    //  calcMotorsSpeed2((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+  }
+
+  if (millis() - lastTime2 > 100)
+  {
+    lastTime2 = millis();
+    /* float result = map((float)RemoteXY.slider_01, 0, 100, 0, 255);
+    debugln("Result: " + String(result));
+    analogWrite(MOTOR1_PIN1, abs(result));
+    digitalWrite(MOTOR1_PIN2, LOW);
+    analogWrite(MOTOR2_PIN1, abs(result));
+    digitalWrite(MOTOR2_PIN2, LOW);
+    analogWrite(MOTOR3_PIN1, abs(result));
+    digitalWrite(MOTOR3_PIN2, LOW);
+    dtostrf(result, 0, 1, RemoteXY.sliderValue); */
+  }
+}
+
+void serialEvent()
+{
+  while (Serial.available())
+  {
+    char inChar = (char)Serial.read();
+    inputString += inChar;
+
+    if (inChar == '\n') // enter key
+    {
+      stringComplete = true;
+    }
   }
 }
