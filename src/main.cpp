@@ -33,6 +33,15 @@ float calcPWM21 = 0;
 float calcPWM22 = 0;
 float calcPWM23 = 0;
 
+// RPM variable
+unsigned long M1t1 = 0, M1t2 = 0, M1t = 0;
+unsigned long M2t1 = 0, M2t2 = 0, M2t = 0;
+unsigned long M3t1 = 0, M3t2 = 0, M3t = 0;
+bool M1MeasDone = 0, M2MeasDone = 0, M3MeasDone = 0;
+unsigned long M1previousInterrupt = 0;
+unsigned long M2previousInterrupt = 0;
+unsigned long M3previousInterrupt = 0;
+
 String inputString = "";     // a String to hold incoming data
 bool stringComplete = false; // whether the string is complete
 
@@ -74,6 +83,64 @@ struct
 
 } RemoteXY;
 #pragma pack(pop)
+
+/// @brief Interrupt handler to measure RPM
+void IRAM_ATTR isrM1()
+{
+  if (millis() - M1previousInterrupt >= 70)
+  {
+    M1previousInterrupt = millis();
+    if (M1MeasDone)
+    {
+      M1t2 = micros();
+      M1t = M1t2 - M1t1;
+      M1MeasDone = 0;
+    }
+    else
+    {
+      M1t1 = micros();
+      M1MeasDone = 1;
+    }
+  }
+}
+
+void IRAM_ATTR isrM2()
+{
+  if (millis() - M2previousInterrupt >= 70)
+  {
+    M2previousInterrupt = millis();
+    if (M2MeasDone)
+    {
+      M2t2 = micros();
+      M2t = M2t2 - M2t1;
+      M2MeasDone = 0;
+    }
+    else
+    {
+      M2t1 = micros();
+      M2MeasDone = 1;
+    }
+  }
+}
+
+void IRAM_ATTR isrM3()
+{
+  if (millis() - M3previousInterrupt >= 70)
+  {
+    M3previousInterrupt = millis();
+    if (M3MeasDone)
+    {
+      M3t2 = micros();
+      M3t = M3t2 - M3t1;
+      M3MeasDone = 0;
+    }
+    else
+    {
+      M3t1 = micros();
+      M3MeasDone = 1;
+    }
+  }
+}
 
 int roundTo10(int n)
 {
@@ -262,8 +329,16 @@ void setup()
   pinMode(MOTOR3_PIN1, OUTPUT);
   pinMode(MOTOR3_PIN2, OUTPUT);
 
+  pinMode(MOTOR1_RPM_PIN, INPUT);
+  pinMode(MOTOR2_RPM_PIN, INPUT);
+  pinMode(MOTOR3_RPM_PIN, INPUT);
+  attachInterrupt(digitalPinToInterrupt(MOTOR1_RPM_PIN), isrM1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(MOTOR2_RPM_PIN), isrM2, FALLING);
+  attachInterrupt(digitalPinToInterrupt(MOTOR3_RPM_PIN), isrM3, FALLING);
+
   RemoteXY_Init();
   STOP();
+
   debugln("Setup done");
 }
 

@@ -8,6 +8,10 @@
 #define MOTOR3_PIN1 D5
 #define MOTOR3_PIN2 D6
 
+#define MOTOR1_RPM_PIN D7
+#define MOTOR2_RPM_PIN D8
+#define MOTOR3_RPM_PIN A0
+
 float M11 = -0.33;
 float M12 = 0.58;
 float M13 = 0.33;
