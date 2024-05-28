@@ -6,11 +6,14 @@
 #define MOTOR2_PIN1 D3
 #define MOTOR2_PIN2 D4
 #define MOTOR3_PIN1 D5
-#define MOTOR3_PIN2 D6
+#define MOTOR3_PIN2 D8
 
 #define MOTOR1_RPM_PIN D7
-#define MOTOR2_RPM_PIN D8
-#define MOTOR3_RPM_PIN A0
+#define MOTOR2_RPM_PIN D6
+#define MOTOR3_RPM_PIN RX // use also TX pin with pinmode funcion_3
+// https://www.esp8266.com/wiki/doku.php?id=esp8266_gpio_pin_allocations
+
+#define ENCODER_N 16
 
 float M11 = -0.33;
 float M12 = 0.58;

@@ -41,6 +41,12 @@ bool M1MeasDone = 0, M2MeasDone = 0, M3MeasDone = 0;
 unsigned long M1previousInterrupt = 0;
 unsigned long M2previousInterrupt = 0;
 unsigned long M3previousInterrupt = 0;
+unsigned long previousM1T1 = 0;
+unsigned long previousM2T1 = 0;
+unsigned long previousM3T1 = 0;
+int Motor1_RPM = 0;
+int Motor2_RPM = 0;
+int Motor3_RPM = 0;
 
 String inputString = "";     // a String to hold incoming data
 bool stringComplete = false; // whether the string is complete
@@ -142,6 +148,66 @@ void IRAM_ATTR isrM3()
   }
 }
 
+void calcMotor1RPM()
+{
+  if (M1t != 0)
+  {
+    Motor1_RPM = (60000000) / (M1t * ENCODER_N);
+    if (Motor1_RPM != 0)
+    {
+      if (millis() - (previousM1T1 / 1000) >= ((((60 * 1000) / (Motor1_RPM * ENCODER_N)) * 2) + 500))
+      {
+        if (previousM1T1 == M1t1)
+        {
+          M1t = 0;
+          Motor1_RPM = 0;
+        }
+        previousM1T1 = M1t1;
+      }
+    }
+  }
+}
+
+void calcMotor2RPM()
+{
+  if (M2t != 0)
+  {
+    Motor2_RPM = (60000000) / (M2t * ENCODER_N);
+    if (Motor2_RPM != 0)
+    {
+      if (millis() - (previousM2T1 / 1000) >= ((((60 * 1000) / (Motor2_RPM * ENCODER_N)) * 2) + 500))
+      {
+        if (previousM2T1 == M2t1)
+        {
+          M2t = 0;
+          Motor2_RPM = 0;
+        }
+        previousM2T1 = M2t1;
+      }
+    }
+  }
+}
+
+void calcMotor3RPM()
+{
+  if (M3t != 0)
+  {
+    Motor3_RPM = (60000000) / (M3t * ENCODER_N);
+    if (Motor3_RPM != 0)
+    {
+      if (millis() - (previousM3T1 / 1000) >= ((((60 * 1000) / (Motor3_RPM * ENCODER_N)) * 2) + 500))
+      {
+        if (previousM3T1 == M3t1)
+        {
+          M3t = 0;
+          Motor3_RPM = 0;
+        }
+        previousM3T1 = M3t1;
+      }
+    }
+  }
+}
+
 int roundTo10(int n)
 {
   // Smaller multiple
@@ -207,7 +273,7 @@ void setMotorsPWM()
   }
 }
 
-void setMotorsPWM2()
+/* void setMotorsPWM2()
 {
   if (PWM21 > 0)
   {
@@ -241,7 +307,7 @@ void setMotorsPWM2()
     digitalWrite(MOTOR3_PIN1, LOW);
     analogWrite(MOTOR3_PIN2, abs(calcPWM23));
   }
-}
+} */
 
 void calcMotorsSpeed(float x, float y, float omega)
 {
@@ -286,7 +352,7 @@ void calcMotorsSpeed(float x, float y, float omega)
   }
 }
 
-void calcMotorsSpeed2(float x_dot, float y_dot, float theta_dot)
+/* void calcMotorsSpeed2(float x_dot, float y_dot, float theta_dot)
 {
   if (x_dot != 0 || y_dot != 0)
   {
@@ -316,12 +382,13 @@ void calcMotorsSpeed2(float x_dot, float y_dot, float theta_dot)
   {
     STOP();
   }
-}
+} */
 
 void setup()
 {
   delay(1000);
   Serial.begin(115200);
+  Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY, 1, false);
   pinMode(MOTOR1_PIN1, OUTPUT);
   pinMode(MOTOR1_PIN2, OUTPUT);
   pinMode(MOTOR2_PIN1, OUTPUT);
@@ -331,7 +398,10 @@ void setup()
 
   pinMode(MOTOR1_RPM_PIN, INPUT);
   pinMode(MOTOR2_RPM_PIN, INPUT);
+
+  pinMode(MOTOR3_RPM_PIN, FUNCTION_3);
   pinMode(MOTOR3_RPM_PIN, INPUT);
+
   attachInterrupt(digitalPinToInterrupt(MOTOR1_RPM_PIN), isrM1, FALLING);
   attachInterrupt(digitalPinToInterrupt(MOTOR2_RPM_PIN), isrM2, FALLING);
   attachInterrupt(digitalPinToInterrupt(MOTOR3_RPM_PIN), isrM3, FALLING);
@@ -345,7 +415,7 @@ void setup()
 void loop()
 {
   RemoteXY_Handler();
-  if (stringComplete)
+  /* if (stringComplete)
   {
     String s = inputString;
     // clear the string:
@@ -361,7 +431,7 @@ void loop()
     analogWrite(MOTOR3_PIN1, abs(result));
     digitalWrite(MOTOR3_PIN2, LOW);
     dtostrf(result, 0, 1, RemoteXY.sliderValue);
-  }
+  }*/
 
   if (millis() - lastTime > 100)
   {
@@ -384,9 +454,15 @@ void loop()
     digitalWrite(MOTOR3_PIN2, LOW);
     dtostrf(result, 0, 1, RemoteXY.sliderValue); */
   }
+  calcMotor1RPM();
+  calcMotor2RPM();
+  calcMotor3RPM();
+
+  Serial.println(String(Motor1_RPM) + "\t" + String(Motor2_RPM) + "\t" + String(Motor3_RPM));
+  Serial.println(analogRead(A0));
 }
 
-void serialEvent()
+/* void serialEvent()
 {
   while (Serial.available())
   {
@@ -398,4 +474,4 @@ void serialEvent()
       stringComplete = true;
     }
   }
-}
+}*/
