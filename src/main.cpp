@@ -325,6 +325,58 @@ void calcMotorsSpeed(float x, float y, float omega)
   }
 }
 
+void calcMotorSpeedWithRPMSensors(float x, float y, float omega)
+{
+  if (x != 0 || y != 0)
+  {
+    PWM1 = x * M11 + y * M12 + omega * M13;
+    PWM2 = x * M21 + y * M22 + omega * M23;
+    PWM3 = x * M31 + y * M32 + omega * M33;
+
+    calcPWM1 = PWM1 * 255;
+    calcPWM2 = PWM2 * 255;
+    calcPWM3 = PWM3 * 255;
+
+    setMotorsPWM();
+  }
+  else
+  {
+    STOP();
+  }
+}
+
+void adjustPWM()
+{
+  if (calcPWM1 / 255 * MAX_RPM > Motor1_RPM)
+  {
+    calcPWM1 = calcPWM1 - PWM_STEP;
+  }
+  else if (calcPWM1 / 255 * MAX_RPM < Motor1_RPM)
+  {
+    calcPWM1 = calcPWM1 + PWM_STEP;
+  }
+
+  if (calcPWM2 / 255 * MAX_RPM > Motor2_RPM)
+  {
+    calcPWM2 = calcPWM2 - PWM_STEP;
+  }
+  else if (calcPWM2 / 255 * MAX_RPM < Motor2_RPM)
+  {
+    calcPWM2 = calcPWM2 + PWM_STEP;
+  }
+
+  if (calcPWM3 / 255 * MAX_RPM > Motor3_RPM)
+  {
+    calcPWM3 = calcPWM3 - PWM_STEP;
+  }
+  else if (calcPWM3 / 255 * MAX_RPM < Motor3_RPM)
+  {
+    calcPWM3 = calcPWM3 + PWM_STEP;
+  }
+
+  setMotorsPWM();
+}
+
 /// @brief Setup function
 void setup()
 {
@@ -349,8 +401,6 @@ void setup()
 
   RemoteXY_Init();
   STOP();
-
-  debugln("Setup done");
 }
 
 /// @brief Main loop
@@ -363,7 +413,6 @@ void loop()
     lastTime = millis();
 
     calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
-    //  calcMotorsSpeed2((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
   }
 
   if (millis() - lastTime2 > 100)
@@ -394,4 +443,6 @@ void loop()
   strcpy(RemoteXY.M1, m1OutputText.c_str());
   strcpy(RemoteXY.M2, m2OutputText.c_str());
   strcpy(RemoteXY.M3, m3OutputText.c_str());
+
+  // adjustPWM();
 }

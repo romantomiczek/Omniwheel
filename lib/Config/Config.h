@@ -10,10 +10,12 @@
 
 #define MOTOR1_RPM_PIN D7
 #define MOTOR2_RPM_PIN D6
-#define MOTOR3_RPM_PIN RX // use also TX pin with pinmode funcion_3
+#define MOTOR3_RPM_PIN RX // use also TX pin with pinmode function_3
 // https://www.esp8266.com/wiki/doku.php?id=esp8266_gpio_pin_allocations
 
 #define ENCODER_N 16
+#define MAX_RPM 140
+#define PWM_STEP 4
 
 float M11 = -0.33;
 float M12 = 0.58;
