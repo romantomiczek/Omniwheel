@@ -1,11 +1,12 @@
 #include <Arduino.h>
 #include "Config.h"
+#include <LPF.h>
 
 #define DEBUG 0
 
 #if DEBUG == 1
-#define debug(x) Serial.print(x)
-#define debugln(x) Serial.println(x)
+#define debug(x)   // Serial.print(x)
+#define debugln(x) // Serial.println(x)
 #else
 #define debug(x)
 #define debugln(x)
@@ -17,21 +18,12 @@ unsigned long lastTime2 = 0;
 float PWM1 = 0;
 float PWM2 = 0;
 float PWM3 = 0;
-float PWM21 = 0;
-float PWM22 = 0;
-float PWM23 = 0;
 float setPercentageSpeed = 0;
-float setPercentageSpeed2 = 0;
 int setSpeed = 0;
-int setSpeed2 = 0;
 float maxCalcPWM = 0;
-float maxCalcPWM2 = 0;
 float calcPWM1 = 0;
 float calcPWM2 = 0;
 float calcPWM3 = 0;
-float calcPWM21 = 0;
-float calcPWM22 = 0;
-float calcPWM23 = 0;
 
 // RPM variable
 unsigned long M1t1 = 0, M1t2 = 0, M1t = 0;
@@ -48,8 +40,17 @@ int Motor1_RPM = 0;
 int Motor2_RPM = 0;
 int Motor3_RPM = 0;
 
-String inputString = "";     // a String to hold incoming data
-bool stringComplete = false; // whether the string is complete
+LPF LPF_M1(1);
+LPF LPF_M2(1);
+LPF LPF_M3(1);
+int PFV_M1 = 0;
+int PFV_M2 = 0;
+int PFV_M3 = 0;
+
+String str;
+String m1OutputText;
+String m2OutputText;
+String m3OutputText;
 
 // you can enable debug logging to Serial at 115200
 // #define REMOTEXY__DEBUGLOG
@@ -65,24 +66,27 @@ bool stringComplete = false; // whether the string is complete
 
 #include <RemoteXY.h>
 
-// RemoteXY configurate
+// RemoteXY GUI configuration
 #pragma pack(push, 1)
-uint8_t RemoteXY_CONF[] = // 45 bytes
-    {255, 3, 0, 6, 0, 38, 0, 17, 0, 0, 0, 31, 1, 106, 200, 1, 1, 3, 0, 5,
-     15, 40, 60, 60, 53, 106, 26, 31, 4, 85, 83, 15, 111, 0, 105, 26, 67, 30, 152, 40,
-     10, 4, 16, 26, 6};
+uint8_t RemoteXY_CONF[] = // 63 bytes
+    {255, 3, 0, 63, 0, 56, 0, 17, 0, 0, 0, 27, 1, 106, 200, 1, 1, 5, 0, 5,
+     22, 27, 60, 60, 53, 12, 26, 31, 67, 18, 168, 55, 13, 4, 31, 26, 21, 67, 18, 150,
+     55, 13, 4, 31, 26, 21, 67, 18, 134, 55, 13, 4, 31, 26, 21, 4, 83, 80, 16, 110,
+     0, 2, 26};
 
 // this structure defines all the variables and events of your control interface
 struct
 {
 
   // input variables
-  int8_t joystick_01_x; // from -100 to 100}
-  int8_t joystick_01_y; // from -100 to 100}
-  int8_t slider_01;     // =0..100 slider position
+  int8_t joystick_01_x; // from -100 to 100
+  int8_t joystick_01_y; // from -100 to 100
+  int8_t slider_01;     // from 0 to 100
 
   // output variables
-  char sliderValue[6]; // string UTF8 end zero
+  char M3[21]; // string UTF8 end zero
+  char M2[21]; // string UTF8 end zero
+  char M1[21]; // string UTF8 end zero
 
   // other variable
   uint8_t connect_flag; // =1 if wire connected, else =0
@@ -90,10 +94,10 @@ struct
 } RemoteXY;
 #pragma pack(pop)
 
-/// @brief Interrupt handler to measure RPM
+/// @brief Interrupt handler to measure RPM for motor 1
 void IRAM_ATTR isrM1()
 {
-  if (millis() - M1previousInterrupt >= 70)
+  if (millis() - M1previousInterrupt >= PREVIOUS_INTERRUPT_LIMIT)
   {
     M1previousInterrupt = millis();
     if (M1MeasDone)
@@ -110,9 +114,10 @@ void IRAM_ATTR isrM1()
   }
 }
 
+/// @brief Interrupt handler to measure RPM for motor 2
 void IRAM_ATTR isrM2()
 {
-  if (millis() - M2previousInterrupt >= 70)
+  if (millis() - M2previousInterrupt >= PREVIOUS_INTERRUPT_LIMIT)
   {
     M2previousInterrupt = millis();
     if (M2MeasDone)
@@ -129,9 +134,10 @@ void IRAM_ATTR isrM2()
   }
 }
 
+/// @brief Interrupt handler to measure RPM for motor 3
 void IRAM_ATTR isrM3()
 {
-  if (millis() - M3previousInterrupt >= 70)
+  if (millis() - M3previousInterrupt >= PREVIOUS_INTERRUPT_LIMIT)
   {
     M3previousInterrupt = millis();
     if (M3MeasDone)
@@ -148,6 +154,7 @@ void IRAM_ATTR isrM3()
   }
 }
 
+/// @brief Calculate RPM for motor 1
 void calcMotor1RPM()
 {
   if (M1t != 0)
@@ -168,6 +175,7 @@ void calcMotor1RPM()
   }
 }
 
+/// @brief Calculate RPM for motor 2
 void calcMotor2RPM()
 {
   if (M2t != 0)
@@ -188,6 +196,7 @@ void calcMotor2RPM()
   }
 }
 
+/// @brief Calculate RPM for motor 3
 void calcMotor3RPM()
 {
   if (M3t != 0)
@@ -208,6 +217,9 @@ void calcMotor3RPM()
   }
 }
 
+/// @brief round Input to nearest multiple of 10
+/// @param n input number
+/// @return round to nearest multiple of 10
 int roundTo10(int n)
 {
   // Smaller multiple
@@ -220,6 +232,9 @@ int roundTo10(int n)
   return (n - a > b - n) ? b : a;
 }
 
+/// @brief round Input to nearest multiple of 20
+/// @param n input number
+/// @return round to nearest multiple of 20
 int roundTo20(int n)
 {
   int a = (n / 20) * 20;
@@ -227,6 +242,7 @@ int roundTo20(int n)
   return (n - a > b - n) ? b : a;
 }
 
+/// @brief Stop all motors
 void STOP()
 {
   digitalWrite(MOTOR1_PIN1, LOW);
@@ -237,6 +253,7 @@ void STOP()
   digitalWrite(MOTOR3_PIN2, LOW);
 }
 
+/// @brief Set PWM to motors
 void setMotorsPWM()
 {
   if (PWM1 > 0)
@@ -273,42 +290,7 @@ void setMotorsPWM()
   }
 }
 
-/* void setMotorsPWM2()
-{
-  if (PWM21 > 0)
-  {
-    analogWrite(MOTOR1_PIN1, abs(calcPWM21));
-    digitalWrite(MOTOR1_PIN2, LOW);
-  }
-  else
-  {
-    digitalWrite(MOTOR1_PIN1, LOW);
-    analogWrite(MOTOR1_PIN2, abs(calcPWM21));
-  }
-
-  if (PWM22 > 0)
-  {
-    analogWrite(MOTOR2_PIN1, abs(calcPWM22));
-    digitalWrite(MOTOR2_PIN2, LOW);
-  }
-  else
-  {
-    digitalWrite(MOTOR2_PIN1, LOW);
-    analogWrite(MOTOR2_PIN2, abs(calcPWM22));
-  }
-
-  if (PWM23 > 0)
-  {
-    analogWrite(MOTOR3_PIN1, abs(calcPWM23));
-    digitalWrite(MOTOR3_PIN2, LOW);
-  }
-  else
-  {
-    digitalWrite(MOTOR3_PIN1, LOW);
-    analogWrite(MOTOR3_PIN2, abs(calcPWM23));
-  }
-} */
-
+/// @brief Calculate motor speed from joystick input
 void calcMotorsSpeed(float x, float y, float omega)
 {
   if (x != 0 || y != 0)
@@ -333,16 +315,7 @@ void calcMotorsSpeed(float x, float y, float omega)
     calcPWM1 = map(abs(PWM1) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
     calcPWM2 = map(abs(PWM2) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
     calcPWM3 = map(abs(PWM3) * 100, 0, maxCalcPWM * 100, PWM_THRESHOLD, setSpeed);
-    debugln("Calc PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
-
-    // calcPWM1 = PWM_Const_2[(int)calcPWM1];
-    // calcPWM2 = PWM_Const_2[(int)calcPWM2];
-    // calcPWM3 = PWM_Const_2[(int)calcPWM3];
-    // calcPWM1 = 0; // 127-135
-    // calcPWM2 = 0;   // 137-156
-    // calcPWM3 = 0;   // 146-151
-
-    debugln("Cacl new PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
+    // debugln("Calc PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
 
     setMotorsPWM();
   }
@@ -352,43 +325,11 @@ void calcMotorsSpeed(float x, float y, float omega)
   }
 }
 
-/* void calcMotorsSpeed2(float x_dot, float y_dot, float theta_dot)
-{
-  if (x_dot != 0 || y_dot != 0)
-  {
-    float R = 1; // radius of wheel
-    PWM23 = -R * theta_dot + x_dot;
-    PWM22 = -R * theta_dot - 0.5 * x_dot - sin(PI / 3.0) * y_dot;
-    PWM21 = -R * theta_dot - 0.5 * x_dot + sin(PI / 3.0) * y_dot;
-
-    setPercentageSpeed2 = max(abs(x_dot), abs(y_dot));
-    // debugln("Set speed: " + String(setPercentageSpeed));
-
-    setSpeed2 = map(setPercentageSpeed2 * 100, 0, 100, PWM_THRESHOLD, 255);
-    // debugln("Set PWM speed: " + String(setSpeed));
-
-    maxCalcPWM2 = max(abs(PWM21), max(abs(PWM22), abs(PWM23)));
-    // debugln("Max calc PWM: " + String(maxCalcPWM));
-
-    calcPWM21 = map(abs(PWM21) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
-    calcPWM22 = map(abs(PWM22) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
-    calcPWM23 = map(abs(PWM23) * 100, 0, maxCalcPWM2 * 100, PWM_THRESHOLD, setSpeed2);
-    debugln("Calc PWM2: " + String(calcPWM21) + " " + String(calcPWM22) + " " + String(calcPWM23));
-    debugln("PWM: " + String(PWM21) + " " + String(PWM22) + " " + String(PWM23));
-
-    setMotorsPWM2();
-  }
-  else
-  {
-    STOP();
-  }
-} */
-
+/// @brief Setup function
 void setup()
 {
   delay(1000);
-  Serial.begin(115200);
-  Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY, 1, false);
+  // Serial.begin(115200, SERIAL_8N1, SERIAL_TX_ONLY, 1, false);
   pinMode(MOTOR1_PIN1, OUTPUT);
   pinMode(MOTOR1_PIN2, OUTPUT);
   pinMode(MOTOR2_PIN1, OUTPUT);
@@ -412,26 +353,10 @@ void setup()
   debugln("Setup done");
 }
 
+/// @brief Main loop
 void loop()
 {
   RemoteXY_Handler();
-  /* if (stringComplete)
-  {
-    String s = inputString;
-    // clear the string:
-    inputString = "";
-    stringComplete = false;
-
-    int result = s.toInt();
-    debugln("Result: " + String(result));
-    analogWrite(MOTOR1_PIN1, abs(result));
-    digitalWrite(MOTOR1_PIN2, LOW);
-    analogWrite(MOTOR2_PIN1, abs(result));
-    digitalWrite(MOTOR2_PIN2, LOW);
-    analogWrite(MOTOR3_PIN1, abs(result));
-    digitalWrite(MOTOR3_PIN2, LOW);
-    dtostrf(result, 0, 1, RemoteXY.sliderValue);
-  }*/
 
   if (millis() - lastTime > 100)
   {
@@ -445,33 +370,28 @@ void loop()
   {
     lastTime2 = millis();
     /* float result = map((float)RemoteXY.slider_01, 0, 100, 0, 255);
-    debugln("Result: " + String(result));
     analogWrite(MOTOR1_PIN1, abs(result));
     digitalWrite(MOTOR1_PIN2, LOW);
     analogWrite(MOTOR2_PIN1, abs(result));
     digitalWrite(MOTOR2_PIN2, LOW);
     analogWrite(MOTOR3_PIN1, abs(result));
-    digitalWrite(MOTOR3_PIN2, LOW);
-    dtostrf(result, 0, 1, RemoteXY.sliderValue); */
+    digitalWrite(MOTOR3_PIN2, LOW);*/
   }
   calcMotor1RPM();
   calcMotor2RPM();
   calcMotor3RPM();
 
-  Serial.println(String(Motor1_RPM) + "\t" + String(Motor2_RPM) + "\t" + String(Motor3_RPM));
-  Serial.println(analogRead(A0));
+  // str = String(Motor1_RPM) + ";" + String(Motor2_RPM) + ";" + String(Motor3_RPM);
+
+  PFV_M1 = LPF_M1.Step(Motor1_RPM);
+  PFV_M2 = LPF_M2.Step(Motor2_RPM);
+  PFV_M3 = LPF_M3.Step(Motor3_RPM);
+
+  m1OutputText = String(calcPWM1, 0) + "\t" + String(PFV_M1);
+  m2OutputText = String(calcPWM2, 0) + "\t" + String(PFV_M2);
+  m3OutputText = String(calcPWM3, 0) + "\t" + String(PFV_M3);
+
+  strcpy(RemoteXY.M1, m1OutputText.c_str());
+  strcpy(RemoteXY.M2, m2OutputText.c_str());
+  strcpy(RemoteXY.M3, m3OutputText.c_str());
 }
-
-/* void serialEvent()
-{
-  while (Serial.available())
-  {
-    char inChar = (char)Serial.read();
-    inputString += inChar;
-
-    if (inChar == '\n') // enter key
-    {
-      stringComplete = true;
-    }
-  }
-}*/
