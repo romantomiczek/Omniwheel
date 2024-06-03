@@ -36,13 +36,14 @@ unsigned long M3previousInterrupt = 0;
 unsigned long previousM1T1 = 0;
 unsigned long previousM2T1 = 0;
 unsigned long previousM3T1 = 0;
-int Motor1_RPM = 0;
-int Motor2_RPM = 0;
-int Motor3_RPM = 0;
+unsigned int Motor1_RPM = 0;
+unsigned int Motor2_RPM = 0;
+unsigned int Motor3_RPM = 0;
 
-LPF LPF_M1(1);
-LPF LPF_M2(1);
-LPF LPF_M3(1);
+// Low pass filter variables
+LPF LPF_M1(2);
+LPF LPF_M2(2);
+LPF LPF_M3(2);
 int PFV_M1 = 0;
 int PFV_M2 = 0;
 int PFV_M3 = 0;
@@ -51,6 +52,15 @@ String str;
 String m1OutputText;
 String m2OutputText;
 String m3OutputText;
+
+// Filter variables
+const int SMOOTHING_WINDOW_SIZE = 10; // 10 samples
+int _samples[SMOOTHING_WINDOW_SIZE];  // the readings from the analog input
+int _curReadIndex = 0;                // the index of the current reading
+int _sampleTotal = 0;                 // the running total
+int filterResult = 0;                 // the average
+
+float _ewmaAlpha = 0.1; // the EWMA alpha value (α)
 
 // you can enable debug logging to Serial at 115200
 // #define REMOTEXY__DEBUGLOG
@@ -104,13 +114,25 @@ void IRAM_ATTR isrM1()
     {
       M1t2 = micros();
       M1t = M1t2 - M1t1;
-      M1MeasDone = 0;
+      M1t1 = M1t2;
     }
     else
     {
       M1t1 = micros();
       M1MeasDone = 1;
     }
+
+    /* if (M1MeasDone)
+    {
+      M1t2 = micros();
+      M1t = M1t2 - M1t1;
+      M1MeasDone = 0;
+    }
+    else
+    {
+      M1t1 = micros();
+      M1MeasDone = 1;
+    } */
   }
 }
 
@@ -162,12 +184,13 @@ void calcMotor1RPM()
     Motor1_RPM = (60000000) / (M1t * ENCODER_N);
     if (Motor1_RPM != 0)
     {
-      if (millis() - (previousM1T1 / 1000) >= ((((60 * 1000) / (Motor1_RPM * ENCODER_N)) * 2) + 500))
+      if (millis() - (previousM1T1 / 1000) >= ((((60 * 1000) / (Motor1_RPM * ENCODER_N)) * 2) + 300))
       {
         if (previousM1T1 == M1t1)
         {
           M1t = 0;
           Motor1_RPM = 0;
+          M1MeasDone = 0;
         }
         previousM1T1 = M1t1;
       }
@@ -245,6 +268,9 @@ int roundTo20(int n)
 /// @brief Stop all motors
 void STOP()
 {
+  calcPWM1 = 0;
+  calcPWM2 = 0;
+  calcPWM3 = 0;
   digitalWrite(MOTOR1_PIN1, LOW);
   digitalWrite(MOTOR1_PIN2, LOW);
   digitalWrite(MOTOR2_PIN1, LOW);
@@ -333,9 +359,9 @@ void calcMotorSpeedWithRPMSensors(float x, float y, float omega)
     PWM2 = x * M21 + y * M22 + omega * M23;
     PWM3 = x * M31 + y * M32 + omega * M33;
 
-    calcPWM1 = PWM1 * 255;
-    calcPWM2 = PWM2 * 255;
-    calcPWM3 = PWM3 * 255;
+    calcPWM1 = abs(PWM1) * 255;
+    calcPWM2 = abs(PWM2) * 255;
+    calcPWM3 = abs(PWM3) * 255;
 
     setMotorsPWM();
   }
@@ -377,6 +403,27 @@ void adjustPWM()
   setMotorsPWM();
 }
 
+void smoothMovingAverageFilter()
+{
+  _sampleTotal = _sampleTotal - _samples[_curReadIndex];
+  int sensorVal = 0; // input
+  _samples[_curReadIndex] = sensorVal;
+  _sampleTotal = _sampleTotal + _samples[_curReadIndex];
+  _curReadIndex++;
+
+  if (_curReadIndex >= SMOOTHING_WINDOW_SIZE)
+  {
+    _curReadIndex = 0;
+  }
+  filterResult = _sampleTotal / SMOOTHING_WINDOW_SIZE;
+}
+
+void exponentialMovingAverageFilter()
+{
+  int sensorVal = 0; // input
+  filterResult = (_ewmaAlpha * sensorVal) + (1 - _ewmaAlpha) * filterResult;
+}
+
 /// @brief Setup function
 void setup()
 {
@@ -399,6 +446,11 @@ void setup()
   attachInterrupt(digitalPinToInterrupt(MOTOR2_RPM_PIN), isrM2, FALLING);
   attachInterrupt(digitalPinToInterrupt(MOTOR3_RPM_PIN), isrM3, FALLING);
 
+  for (int i = 0; i < SMOOTHING_WINDOW_SIZE; i++)
+  {
+    _samples[i] = 0;
+  }
+
   RemoteXY_Init();
   STOP();
 }
@@ -412,7 +464,8 @@ void loop()
   {
     lastTime = millis();
 
-    calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+    // calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+    calcMotorSpeedWithRPMSensors((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
   }
 
   if (millis() - lastTime2 > 100)
@@ -432,9 +485,9 @@ void loop()
 
   // str = String(Motor1_RPM) + ";" + String(Motor2_RPM) + ";" + String(Motor3_RPM);
 
-  PFV_M1 = LPF_M1.Step(Motor1_RPM);
-  PFV_M2 = LPF_M2.Step(Motor2_RPM);
-  PFV_M3 = LPF_M3.Step(Motor3_RPM);
+  PFV_M1 = LPF_M1.Step((int)Motor1_RPM);
+  PFV_M2 = LPF_M2.Step((int)Motor2_RPM);
+  PFV_M3 = LPF_M3.Step((int)Motor3_RPM);
 
   m1OutputText = String(calcPWM1, 0) + "\t" + String(PFV_M1);
   m2OutputText = String(calcPWM2, 0) + "\t" + String(PFV_M2);
