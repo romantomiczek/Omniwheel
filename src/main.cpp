@@ -13,9 +13,7 @@
 #endif
 
 TaskHandle_t RemoteXYTask;
-TaskHandle_t Stepper1Task;
-TaskHandle_t Stepper2Task;
-TaskHandle_t Stepper3Task;
+TaskHandle_t StepperTask;
 
 static SemaphoreHandle_t xMutexStepper1 = xSemaphoreCreateMutex();
 static SemaphoreHandle_t xMutexStepper2 = xSemaphoreCreateMutex();
@@ -24,10 +22,6 @@ static SemaphoreHandle_t xMutexStepper3 = xSemaphoreCreateMutex();
 CheapStepper stepper1(STEPPER1_PIN1, STEPPER1_PIN2, STEPPER1_PIN3, STEPPER1_PIN4);
 CheapStepper stepper2(STEPPER2_PIN1, STEPPER2_PIN2, STEPPER2_PIN3, STEPPER2_PIN4);
 CheapStepper stepper3(STEPPER3_PIN1, STEPPER3_PIN2, STEPPER3_PIN3, STEPPER3_PIN4);
-
-boolean stepper1moveClockwise = true;
-boolean stepper2moveClockwise = true;
-boolean stepper3moveClockwise = true;
 
 unsigned long lastTime = 0;
 
@@ -123,7 +117,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper1, portMAX_DELAY) == pdTRUE)
     {
-      stepper1.move(calcPWM1, true);
+      stepper1.move(calcPWM1, false);
       xSemaphoreGive(xMutexStepper1);
     }
     else
@@ -136,7 +130,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper1, portMAX_DELAY) == pdTRUE)
     {
-      stepper1.move(calcPWM1, false);
+      stepper1.move(calcPWM1, true);
       xSemaphoreGive(xMutexStepper1);
     }
     else
@@ -150,7 +144,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
     {
-      stepper2.move(calcPWM2, true);
+      stepper2.move(calcPWM2, false);
       xSemaphoreGive(xMutexStepper2);
     }
     else
@@ -163,7 +157,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
     {
-      stepper2.move(calcPWM2, false);
+      stepper2.move(calcPWM2, true);
       xSemaphoreGive(xMutexStepper2);
     }
     else
@@ -177,7 +171,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
     {
-      stepper3.move(calcPWM3, true);
+      stepper3.move(calcPWM3, false);
       xSemaphoreGive(xMutexStepper3);
     }
     else
@@ -190,7 +184,7 @@ void setMotorsPWM()
     // Take mutex
     if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
     {
-      stepper3.move(calcPWM3, false);
+      stepper3.move(calcPWM3, true);
       xSemaphoreGive(xMutexStepper3);
     }
     else
@@ -258,7 +252,7 @@ void RemoteXY_Task(void *pvParameters)
 }
 
 /// @brief Stepper1 task
-void Stepper1_Task(void *pvParameters)
+void Stepper_Task(void *pvParameters)
 {
   for (;;)
   {
@@ -268,50 +262,18 @@ void Stepper1_Task(void *pvParameters)
       stepper1.run();
       xSemaphoreGive(xMutexStepper1);
     }
-    else
-    {
-      debugln("Failed to take mutex in run");
-    }
-    // vTaskDelay(1 / portTICK_PERIOD_MS);
-  }
-}
 
-/// @brief Stepper2 task
-void Stepper2_Task(void *pvParameters)
-{
-  for (;;)
-  {
-    // Take Mutex
     if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
     {
       stepper2.run();
       xSemaphoreGive(xMutexStepper2);
     }
-    else
-    {
-      debugln("Failed to take mutex in run");
-    }
 
-    // vTaskDelay(1 / portTICK_PERIOD_MS);
-  }
-}
-
-/// @brief Stepper3 task
-void Stepper3_Task(void *pvParameters)
-{
-  for (;;)
-  {
-    // Take Mutex
     if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
     {
       stepper3.run();
       xSemaphoreGive(xMutexStepper3);
     }
-    else
-    {
-      debugln("Failed to take mutex in run");
-    }
-    // vTaskDelay(1 / portTICK_PERIOD_MS);
   }
 }
 
@@ -336,32 +298,12 @@ void setup()
 
   // create task for Stepper1
   xTaskCreatePinnedToCore(
-      Stepper1_Task,   /* Task function. */
+      Stepper_Task,    /* Task function. */
       "Stepper1_Task", /* name of task. */
       10000,           /* Stack size of task */
       NULL,            /* parameter of the task */
       2,               /* priority of the task */
-      &Stepper1Task,
-      1); /* Task handle to keep track of created task */
-
-  // create task for Stepper2
-  xTaskCreatePinnedToCore(
-      Stepper2_Task,   /* Task function. */
-      "Stepper2_Task", /* name of task. */
-      10000,           /* Stack size of task */
-      NULL,            /* parameter of the task */
-      2,               /* priority of the task */
-      &Stepper2Task,
-      1); /* Task handle to keep track of created task */
-
-  // create task for Stepper3
-  xTaskCreatePinnedToCore(
-      Stepper3_Task,   /* Task function. */
-      "Stepper3_Task", /* name of task. */
-      10000,           /* Stack size of task */
-      NULL,            /* parameter of the task */
-      2,               /* priority of the task */
-      &Stepper3Task,
+      &StepperTask,
       1); /* Task handle to keep track of created task */
 }
 

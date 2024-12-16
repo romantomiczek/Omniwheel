@@ -1,7 +1,7 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#define STEPPER_MAX_SPEED 24
+#define STEPPER_MAX_SPEED 23
 
 #define STEPPER1_PIN1 19
 #define STEPPER1_PIN2 18
