@@ -38,6 +38,7 @@ CheapStepper::CheapStepper(int in1, int in2, int in3, int in4) : pins({in1, in2,
 	{
 		pinMode(pins[pin], OUTPUT);
 	}
+	Serial.println("Stepper initialized");
 }
 
 void CheapStepper::setRpm(float rpm)
@@ -70,8 +71,6 @@ void CheapStepper::newMove(bool clockwise, int numSteps)
 		stepsLeft = abs(numSteps);
 	else
 		stepsLeft = -1 * abs(numSteps);
-
-	lastStepTime = micros();
 }
 
 void CheapStepper::run()
@@ -79,6 +78,8 @@ void CheapStepper::run()
 
 	if (micros() - lastStepTime >= delay)
 	{ // if time for step
+		long actualDelay = micros() - lastStepTime;
+		long error = actualDelay - delay;
 		if (stepsLeft > 0)
 		{ // clockwise
 			stepCW();
@@ -256,5 +257,6 @@ void CheapStepper::seq(int seqNum)
 	for (int p = 0; p < 4; p++)
 	{
 		digitalWrite(pins[p], pattern[p]);
+		// Serial.println("Pin " + String(pins[p]));
 	}
 }

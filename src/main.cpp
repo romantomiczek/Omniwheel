@@ -2,7 +2,7 @@
 #include "Config.h"
 #include <CheapStepper.h>
 
-#define DEBUG 1
+#define DEBUG 0
 
 #if DEBUG == 1
 #define debug(x) Serial.print(x)
@@ -11,6 +11,15 @@
 #define debug(x)
 #define debugln(x)
 #endif
+
+TaskHandle_t RemoteXYTask;
+TaskHandle_t Stepper1Task;
+TaskHandle_t Stepper2Task;
+TaskHandle_t Stepper3Task;
+
+static SemaphoreHandle_t xMutexStepper1 = xSemaphoreCreateMutex();
+static SemaphoreHandle_t xMutexStepper2 = xSemaphoreCreateMutex();
+static SemaphoreHandle_t xMutexStepper3 = xSemaphoreCreateMutex();
 
 CheapStepper stepper1(STEPPER1_PIN1, STEPPER1_PIN2, STEPPER1_PIN3, STEPPER1_PIN4);
 CheapStepper stepper2(STEPPER2_PIN1, STEPPER2_PIN2, STEPPER2_PIN3, STEPPER2_PIN4);
@@ -34,34 +43,6 @@ float maxCalcPWM = 0;
 float calcPWM1 = 0;
 float calcPWM2 = 0;
 float calcPWM3 = 0;
-
-float realPWM1 = 0;
-float realPWM2 = 0;
-float realPWM3 = 0;
-
-// RPM variable
-
-String str;
-String m1OutputText;
-String m2OutputText;
-String m3OutputText;
-
-// Filter variables
-const int SMOOTHING_WINDOW_SIZE = 10;
-int _samplesM1[SMOOTHING_WINDOW_SIZE];
-int _curReadIndexM1 = 0;
-int _sampleTotalM1 = 0;
-int filterResultM1 = 0;
-int _samplesM2[SMOOTHING_WINDOW_SIZE];
-int _curReadIndexM2 = 0;
-int _sampleTotalM2 = 0;
-int filterResultM2 = 0;
-int _samplesM3[SMOOTHING_WINDOW_SIZE];
-int _curReadIndexM3 = 0;
-int _sampleTotalM3 = 0;
-int filterResultM3 = 0;
-
-float _ewmaAlpha = 0.01; // the EWMA alpha value (α)
 
 // you can enable debug logging to Serial at 115200
 // #define REMOTEXY__DEBUGLOG
@@ -97,49 +78,7 @@ struct
 
 } RemoteXY;
 #pragma pack(pop)
-/*
-void smoothMovingAverageFilterM1()
-{
-  _sampleTotalM1 = _sampleTotalM1 - _samplesM1[_curReadIndexM1];
-  _samplesM1[_curReadIndexM1] = Motor1_RPM;
-  _sampleTotalM1 = _sampleTotalM1 + _samplesM1[_curReadIndexM1];
-  _curReadIndexM1++;
 
-  if (_curReadIndexM1 >= SMOOTHING_WINDOW_SIZE)
-  {
-    _curReadIndexM1 = 0;
-  }
-  filterResultM1 = _sampleTotalM1 / SMOOTHING_WINDOW_SIZE;
-}
-
-void smoothMovingAverageFilterM2()
-{
-  _sampleTotalM2 = _sampleTotalM2 - _samplesM2[_curReadIndexM2];
-  _samplesM2[_curReadIndexM2] = Motor2_RPM;
-  _sampleTotalM2 = _sampleTotalM2 + _samplesM2[_curReadIndexM2];
-  _curReadIndexM2++;
-
-  if (_curReadIndexM2 >= SMOOTHING_WINDOW_SIZE)
-  {
-    _curReadIndexM2 = 0;
-  }
-  filterResultM2 = _sampleTotalM2 / SMOOTHING_WINDOW_SIZE;
-}
-
-void smoothMovingAverageFilterM3()
-{
-  _sampleTotalM3 = _sampleTotalM3 - _samplesM3[_curReadIndexM3];
-  _samplesM3[_curReadIndexM3] = Motor3_RPM;
-  _sampleTotalM3 = _sampleTotalM3 + _samplesM3[_curReadIndexM3];
-  _curReadIndexM3++;
-
-  if (_curReadIndexM3 >= SMOOTHING_WINDOW_SIZE)
-  {
-    _curReadIndexM3 = 0;
-  }
-  filterResultM3 = _sampleTotalM3 / SMOOTHING_WINDOW_SIZE;
-}
-*/
 /// @brief round Input to nearest multiple of 10
 /// @param n input number
 /// @return round to nearest multiple of 10
@@ -181,29 +120,83 @@ void setMotorsPWM()
 {
   if (PWM1 > 0)
   {
-    stepper1.move(calcPWM1, true);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper1, portMAX_DELAY) == pdTRUE)
+    {
+      stepper1.move(calcPWM1, true);
+      xSemaphoreGive(xMutexStepper1);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
   else
   {
-    stepper1.move(calcPWM1, false);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper1, portMAX_DELAY) == pdTRUE)
+    {
+      stepper1.move(calcPWM1, false);
+      xSemaphoreGive(xMutexStepper1);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
 
   if (PWM2 > 0)
   {
-    stepper2.move(calcPWM2, true);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
+    {
+      stepper2.move(calcPWM2, true);
+      xSemaphoreGive(xMutexStepper2);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
   else
   {
-    stepper2.move(calcPWM2, false);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
+    {
+      stepper2.move(calcPWM2, false);
+      xSemaphoreGive(xMutexStepper2);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
 
   if (PWM3 > 0)
   {
-    stepper3.move(calcPWM3, true);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
+    {
+      stepper3.move(calcPWM3, true);
+      xSemaphoreGive(xMutexStepper3);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
   else
   {
-    stepper3.move(calcPWM3, false);
+    // Take mutex
+    if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
+    {
+      stepper3.move(calcPWM3, false);
+      xSemaphoreGive(xMutexStepper3);
+    }
+    else
+    {
+      debugln("Failed to take mutex in move");
+    }
   }
 }
 
@@ -244,94 +237,135 @@ void calcMotorsSpeed(float x, float y, float omega)
   }
 }
 
-void calcStepperSpeed(float x, float y, float omega)
+/// @brief RemoteXY task
+void RemoteXY_Task(void *pvParameters)
 {
-  if (x != 0 || y != 0)
+  RemoteXY_Init();
+  for (;;)
   {
-    PWM1 = x * M11 + y * M12 + omega * M13;
-    PWM2 = x * M21 + y * M22 + omega * M23;
-    PWM3 = x * M31 + y * M32 + omega * M33;
+    RemoteXY_Handler();
 
-    Serial.println("PWM1: " + String(PWM1) + " PWM2: " + String(PWM2) + " PWM3: " + String(PWM3));
+    if (millis() - lastTime > 100)
+    {
+      lastTime = millis();
+      // calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+      // get coordinates from joystick
+      calcMotorsSpeed((float)roundTo10(RemoteXY.x) / 100, (float)roundTo10(RemoteXY.y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
+    }
 
-    // TODO: calculate PWM values for stepper motors
-    calcPWM1 = abs(PWM1) * 255;
-    calcPWM2 = abs(PWM2) * 255;
-    calcPWM3 = abs(PWM3) * 255;
+    vTaskDelay(10 / portTICK_PERIOD_MS);
   }
-  else
+}
+
+/// @brief Stepper1 task
+void Stepper1_Task(void *pvParameters)
+{
+  for (;;)
   {
-    STOP();
+    // Take Mutex
+    if (xSemaphoreTake(xMutexStepper1, portMAX_DELAY) == pdTRUE)
+    {
+      stepper1.run();
+      xSemaphoreGive(xMutexStepper1);
+    }
+    else
+    {
+      debugln("Failed to take mutex in run");
+    }
+    // vTaskDelay(1 / portTICK_PERIOD_MS);
   }
 }
-/*
-void exponentialMovingAverageFilterM1()
+
+/// @brief Stepper2 task
+void Stepper2_Task(void *pvParameters)
 {
-  filterResultM1 = (_ewmaAlpha * Motor1_RPM) + (1 - _ewmaAlpha) * filterResultM1;
+  for (;;)
+  {
+    // Take Mutex
+    if (xSemaphoreTake(xMutexStepper2, portMAX_DELAY) == pdTRUE)
+    {
+      stepper2.run();
+      xSemaphoreGive(xMutexStepper2);
+    }
+    else
+    {
+      debugln("Failed to take mutex in run");
+    }
+
+    // vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
 }
 
-void exponentialMovingAverageFilterM2()
+/// @brief Stepper3 task
+void Stepper3_Task(void *pvParameters)
 {
-  filterResultM2 = (_ewmaAlpha * Motor2_RPM) + (1 - _ewmaAlpha) * filterResultM2;
+  for (;;)
+  {
+    // Take Mutex
+    if (xSemaphoreTake(xMutexStepper3, portMAX_DELAY) == pdTRUE)
+    {
+      stepper3.run();
+      xSemaphoreGive(xMutexStepper3);
+    }
+    else
+    {
+      debugln("Failed to take mutex in run");
+    }
+    // vTaskDelay(1 / portTICK_PERIOD_MS);
+  }
 }
-
-void exponentialMovingAverageFilterM3()
-{
-  filterResultM3 = (_ewmaAlpha * Motor3_RPM) + (1 - _ewmaAlpha) * filterResultM3;
-}*/
 
 /// @brief Setup function
 void setup()
 {
-  delay(1000);
   Serial.begin(115200);
 
-  for (int i = 0; i < SMOOTHING_WINDOW_SIZE; i++)
-  {
-    _samplesM1[i] = 0;
-    _samplesM2[i] = 0;
-    _samplesM3[i] = 0;
-  }
+  xMutexStepper1 = xSemaphoreCreateMutex();
+  xMutexStepper2 = xSemaphoreCreateMutex();
+  xMutexStepper3 = xSemaphoreCreateMutex();
 
-  RemoteXY_Init();
-  STOP();
+  // create task for RemoteXY
+  xTaskCreatePinnedToCore(
+      RemoteXY_Task,   /* Task function. */
+      "RemoteXY_Task", /* name of task. */
+      10000,           /* Stack size of task */
+      NULL,            /* parameter of the task */
+      1,               /* priority of the task */
+      &RemoteXYTask,
+      0); /* Task handle to keep track of created task */
+
+  // create task for Stepper1
+  xTaskCreatePinnedToCore(
+      Stepper1_Task,   /* Task function. */
+      "Stepper1_Task", /* name of task. */
+      10000,           /* Stack size of task */
+      NULL,            /* parameter of the task */
+      2,               /* priority of the task */
+      &Stepper1Task,
+      1); /* Task handle to keep track of created task */
+
+  // create task for Stepper2
+  xTaskCreatePinnedToCore(
+      Stepper2_Task,   /* Task function. */
+      "Stepper2_Task", /* name of task. */
+      10000,           /* Stack size of task */
+      NULL,            /* parameter of the task */
+      2,               /* priority of the task */
+      &Stepper2Task,
+      1); /* Task handle to keep track of created task */
+
+  // create task for Stepper3
+  xTaskCreatePinnedToCore(
+      Stepper3_Task,   /* Task function. */
+      "Stepper3_Task", /* name of task. */
+      10000,           /* Stack size of task */
+      NULL,            /* parameter of the task */
+      2,               /* priority of the task */
+      &Stepper3Task,
+      1); /* Task handle to keep track of created task */
 }
 
 /// @brief Main loop
 void loop()
 {
-  RemoteXY_Handler();
-
-  stepper1.run();
-  stepper2.run();
-  stepper3.run();
-
-  if (millis() - lastTime > 100)
-  {
-    lastTime = millis();
-    // calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
-    // get coordinates from joystick
-    calcMotorsSpeed((float)roundTo20(RemoteXY.x) / 100, (float)roundTo20(RemoteXY.y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
-  }
-
-  // apply filter on RPM values
-  // smoothMovingAverageFilterM1();
-  // smoothMovingAverageFilterM2();
-  // smoothMovingAverageFilterM3();
-
-  // exponentialMovingAverageFilterM1();
-  // exponentialMovingAverageFilterM2();
-  // exponentialMovingAverageFilterM3();
-
-  /*
-    // make output text
-    m1OutputText = String(calcPWM1, 0) + "\t" + String(realPWM1, 0) + "\t" + String(filterResultM1);
-    m2OutputText = String(calcPWM2, 0) + "\t" + String(realPWM2, 0) + "\t" + String(filterResultM2);
-    m3OutputText = String(calcPWM3, 0) + "\t" + String(realPWM3, 0) + "\t" + String(filterResultM3);
-
-    // send output text to RemoteXY
-    strcpy(RemoteXY.M1, m1OutputText.c_str());
-    strcpy(RemoteXY.M2, m2OutputText.c_str());
-    strcpy(RemoteXY.M3, m3OutputText.c_str());
-    */
 }
