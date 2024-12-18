@@ -78,8 +78,6 @@ void CheapStepper::run()
 
 	if (micros() - lastStepTime >= delay)
 	{ // if time for step
-		long actualDelay = micros() - lastStepTime;
-		long error = actualDelay - delay;
 		if (stepsLeft > 0)
 		{ // clockwise
 			stepCW();
@@ -257,6 +255,5 @@ void CheapStepper::seq(int seqNum)
 	for (int p = 0; p < 4; p++)
 	{
 		digitalWrite(pins[p], pattern[p]);
-		// Serial.println("Pin " + String(pins[p]));
 	}
 }

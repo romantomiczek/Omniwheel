@@ -221,8 +221,6 @@ void calcMotorsSpeed(float x, float y, float omega)
     calcPWM3 = map(abs(PWM3) * 100, 0, maxCalcPWM * 100, 0, setSpeed);
     debugln("Calc PWM: " + String(calcPWM1) + " " + String(calcPWM2) + " " + String(calcPWM3));
 
-    debugln("__________________________");
-
     setMotorsPWM();
   }
   else
@@ -242,8 +240,6 @@ void RemoteXY_Task(void *pvParameters)
     if (millis() - lastTime > 100)
     {
       lastTime = millis();
-      // calcMotorsSpeed((float)roundTo20(RemoteXY.joystick_01_x) / 100, (float)roundTo20(RemoteXY.joystick_01_y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
-      // get coordinates from joystick
       calcMotorsSpeed((float)roundTo10(RemoteXY.x) / 100, (float)roundTo10(RemoteXY.y) / 100, /*RemoteXY.orientation_01_yaw*/ 0);
     }
 
